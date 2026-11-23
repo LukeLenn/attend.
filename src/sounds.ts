@@ -51,12 +51,38 @@ export interface Preset {
   on: Partial<Record<SoundId, SpotId>>;
 }
 
+export const MAX_SOUNDS = 5;
+export const MAX_REAL = 3;
+
 export const PRESETS: Preset[] = [
-  { id: 'mixed', label: 'mixed', on: { clock: 'near-left', drip: 'near-right', rain: 'near-center', birds: 'far-left', chimes: 'far-right', traffic: 'far-center' } },
-  { id: 'indoors', label: 'indoors', on: { clock: 'near-left', fridge: 'near-center', keys: 'near-right', rain: 'far-left', drip: 'far-right', traffic: 'far-center' } },
-  { id: 'outdoors', label: 'outdoors', on: { fire: 'near-center', crickets: 'near-right', chimes: 'near-left', birds: 'far-left', waves: 'far-center', bell: 'far-right' } },
-  { id: 'busy', label: 'busy · 8', on: { clock: 'near-left', drip: 'near-right', keys: 'near-center', birds: 'far-left', chimes: 'far-right', traffic: 'far-center', fire: 'near-right', bell: 'far-left' } },
+  { id: 'starter', label: 'starter', on: { clock: 'near-left', drip: 'near-right', birds: 'far-center' } },
+  { id: 'indoors', label: 'indoors', on: { fridge: 'near-left', keys: 'near-right', rain: 'far-center' } },
+  { id: 'garden', label: 'garden', on: { chimes: 'near-right', birds: 'far-left', bell: 'far-right' } },
+  { id: 'evening', label: 'evening', on: { fire: 'near-left', crickets: 'far-right', waves: 'far-center' } },
+  { id: 'town', label: 'town', on: { clock: 'near-center', traffic: 'far-left', bell: 'far-right' } },
 ];
+
+/** Pick `count` different sounds and spread them across different spots. */
+export function shuffled(count: number): Partial<Record<SoundId, SpotId>> {
+  const ids = [...LIB.map(s => s.id)].sort(() => Math.random() - 0.5).slice(0, count);
+  // always mix near and far, left and right where possible
+  const spots: SpotId[] = (['near-left', 'far-right', 'near-right', 'far-left', 'far-center', 'near-center'] as SpotId[]);
+  const out: Partial<Record<SoundId, SpotId>> = {};
+  ids.forEach((id, i) => { out[id] = spots[i % spots.length]; });
+  return out;
+}
+
+/** A free spot for a sound being switched on, preferring its usual one. */
+export function freeSpot(settings: Settings, id: SoundId): SpotId {
+  const taken = new Set(LIB.filter(s => s.id !== id && settings.sounds[s.id].on).map(s => settings.sounds[s.id].spot));
+  const mine = settings.sounds[id].spot;
+  if (!taken.has(mine)) return mine;
+  return SPOT_ORDER.find(sp => !taken.has(sp)) ?? mine;
+}
+
+export function soundCount(settings: Settings): number {
+  return LIB.filter(s => settings.sounds[s.id].on).length;
+}
 
 export interface PhaseDef {
   id: PhaseId;
@@ -79,9 +105,9 @@ export const PLAN_PRESETS: { label: string; p: Record<PhaseId, [boolean, number]
 ];
 
 export function defaultSettings(): Settings {
-  const mixed = PRESETS[0].on;
+  const start = PRESETS[0].on;
   const sounds = {} as Settings['sounds'];
-  for (const s of LIB) sounds[s.id] = { on: !!mixed[s.id], spot: mixed[s.id] ?? s.spot };
+  for (const s of LIB) sounds[s.id] = { on: !!start[s.id], spot: start[s.id] ?? s.spot };
   return {
     sounds,
     real: [],
@@ -99,13 +125,15 @@ export function mergeSettings(saved: Partial<Settings> | null): Settings {
   if (!saved) return d;
   const sounds = { ...d.sounds };
   for (const s of LIB) if (saved.sounds?.[s.id]) sounds[s.id] = saved.sounds[s.id];
+  // Older versions allowed many sounds at once; the exercise works with 3–5.
+  if (LIB.filter(s => sounds[s.id].on).length > MAX_SOUNDS) Object.assign(sounds, d.sounds);
   return {
     ...d,
     ...saved,
     sounds,
     phases: { ...d.phases, ...(saved.phases ?? {}) },
     reminder: { ...d.reminder, ...(saved.reminder ?? {}) },
-    real: saved.real ?? [],
+    real: (saved.real ?? []).slice(0, MAX_REAL),
   };
 }
 

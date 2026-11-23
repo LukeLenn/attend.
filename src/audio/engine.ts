@@ -1,140 +1,132 @@
-// Native audio graph. Each playing sound is:
-//   loop buffer → lowpass (distance) → gain → stereo pan → master
-//                                               └→ reverb send ─┘
-import { AudioContext, AudioManager } from 'react-native-audio-api';
-import type { AudioBuffer, AudioBufferSourceNode, BiquadFilterNode, ConvolverNode, GainNode, StereoPannerNode } from 'react-native-audio-api';
-import { LIBMAP, SPOTS } from '../sounds';
+// Plays the soundscape. Each sound + spot is rendered once (in TypeScript)
+// into a stereo WAV in the cache folder, then played by a plain looping
+// expo-audio player. No live native audio graph is touched during a
+// session; the only things that change are each player's volume.
+import { AudioPlayer, createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import { Directory, File, Paths } from 'expo-file-system';
+import { LIBMAP } from '../sounds';
 import { SoundId, SpotId } from '../types';
-import { renderImpulse, renderLoop, SAMPLE_RATE } from './synth';
+import { SPOTS } from '../sounds';
+import { fileName, placeLoop } from './place';
+import { renderLoop } from './synth';
 
 interface Voice {
-  src: AudioBufferSourceNode;
-  lp: BiquadFilterNode;
-  gain: GainNode;
-  pan: StereoPannerNode;
-  send: GainNode;
+  player: AudioPlayer;
   level: number;
+  fade: ReturnType<typeof setInterval> | null;
+  gain: number; // 0..1 fade position
 }
-
-const NEAR_CUTOFF = 14000;
-const FAR_CUTOFF = 2000;
-const FAR_GAIN = 0.42;
 
 const yieldFrame = () => new Promise<void>(r => setTimeout(r, 0));
 
 class Engine {
-  private ctx: AudioContext | null = null;
-  private master: GainNode | null = null;
-  private reverb: ConvolverNode | null = null;
-  private buffers = new Map<SoundId, AudioBuffer>();
   private voices = new Map<string, Voice>();
   private volume = 0.8;
   private ducked = false;
+  private modeSet = false;
+  private dir: Directory | null = null;
+  private rendering = new Map<string, Promise<string>>();
 
-  private ensure(): AudioContext {
-    if (this.ctx) return this.ctx;
+  private async ensureMode() {
+    if (this.modeSet) return;
+    this.modeSet = true;
     try {
-      // Playback category: plays with the silent switch on and keeps going
-      // when the screen locks (UIBackgroundModes audio is set by the plugin).
-      AudioManager.setSystemOptions({ ios: { category: 'playback', mode: 'spokenAudio', options: [] } });
+      // Plays with the silent switch on and keeps going with the screen locked.
+      await setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'mixWithOthers' });
     } catch {
-      // Not fatal: sound still plays with the default session.
+      this.modeSet = false;
     }
-    const ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
-    const master = ctx.createGain();
-    master.gain.value = this.volume;
-    master.connect(ctx.destination);
-    const [l, r] = renderImpulse();
-    const ir = ctx.createBuffer(2, l.length, SAMPLE_RATE);
-    ir.copyToChannel(l, 0);
-    ir.copyToChannel(r, 1);
-    const reverb = ctx.createConvolver();
-    reverb.buffer = ir;
-    reverb.connect(master);
-    this.ctx = ctx;
-    this.master = master;
-    this.reverb = reverb;
-    return ctx;
   }
 
-  /** Render any sounds not yet in memory. Yields between sounds so the UI stays responsive. */
-  async prepare(ids: SoundId[]): Promise<void> {
-    const ctx = this.ensure();
-    for (const id of ids) {
-      if (this.buffers.has(id)) continue;
+  private folder(): Directory {
+    if (!this.dir) {
+      this.dir = new Directory(Paths.cache, 'attend-sounds');
+      if (!this.dir.exists) this.dir.create({ intermediates: true, idempotent: true });
+    }
+    return this.dir;
+  }
+
+  /** Path to the rendered WAV for this sound in this spot, rendering it if needed. */
+  private file(id: SoundId, spot: SpotId): Promise<string> {
+    const name = fileName(id, spot);
+    const pending = this.rendering.get(name);
+    if (pending) return pending;
+    const job = (async () => {
+      const f = new File(this.folder(), name);
+      if (f.exists && f.size > 1000) return f.uri;
       await yieldFrame();
-      const data = renderLoop(id);
-      const buf = ctx.createBuffer(1, data.length, SAMPLE_RATE);
-      buf.copyToChannel(data, 0);
-      this.buffers.set(id, buf);
+      const mono = renderLoop(id);
+      await yieldFrame();
+      const wav = placeLoop(mono, { pan: SPOTS[spot].pan, far: SPOTS[spot].far });
+      if (f.exists) f.delete();
+      f.create();
+      await f.write(wav);
+      return f.uri;
+    })();
+    this.rendering.set(name, job);
+    job.catch(() => {}).finally(() => this.rendering.delete(name));
+    return job;
+  }
+
+  /** Render ahead of time. Reports progress as sounds finish. */
+  async prepare(list: { id: SoundId; spot: SpotId }[], onProgress?: (done: number, total: number) => void): Promise<void> {
+    let done = 0;
+    for (const s of list) {
+      await this.file(s.id, s.spot);
+      onProgress?.(++done, list.length);
     }
   }
 
-  async resume(): Promise<void> {
-    const ctx = this.ensure();
-    if (ctx.state !== 'running') await ctx.resume();
+  private target(v: Voice): number {
+    return v.level * this.volume * (this.ducked ? 0.5 : 1) * v.gain;
   }
 
-  async suspend(): Promise<void> {
-    if (this.ctx && this.ctx.state === 'running') await this.ctx.suspend();
+  private rampTo(v: Voice, to: number, sec: number, done?: () => void) {
+    if (v.fade) clearInterval(v.fade);
+    const steps = Math.max(1, Math.round(sec * 20));
+    const from = v.gain;
+    let i = 0;
+    v.fade = setInterval(() => {
+      i++;
+      v.gain = from + ((to - from) * i) / steps;
+      try { v.player.volume = this.target(v); } catch { /* released */ }
+      if (i >= steps) {
+        if (v.fade) clearInterval(v.fade);
+        v.fade = null;
+        done?.();
+      }
+    }, 50);
   }
 
   async play(key: string, id: SoundId, spot: SpotId, fadeSec = 2): Promise<void> {
-    await this.prepare([id]);
-    await this.resume();
-    const ctx = this.ensure();
-    const buffer = this.buffers.get(id);
-    if (!buffer || !this.master || !this.reverb) return;
-    this.stop(key, 0.05);
-    const sp = SPOTS[spot];
-    const level = LIBMAP[id].level;
-    const src = ctx.createBufferSource();
-    src.buffer = buffer;
-    src.loop = true;
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = sp.far ? FAR_CUTOFF : NEAR_CUTOFF;
-    const gain = ctx.createGain();
-    const pan = ctx.createStereoPanner();
-    pan.pan.value = sp.pan;
-    const send = ctx.createGain();
-    send.gain.value = sp.far ? 0.7 : 0.12;
-    src.connect(lp);
-    lp.connect(gain);
-    gain.connect(pan);
-    pan.connect(this.master);
-    pan.connect(send);
-    send.connect(this.reverb);
-    const now = ctx.currentTime;
-    const target = level * (sp.far ? FAR_GAIN : 1);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.linearRampToValueAtTime(target, now + fadeSec);
-    // Start each loop at a random point so the soundscape never repeats in step.
-    src.start(now, Math.random() * buffer.duration);
-    this.voices.set(key, { src, lp, gain, pan, send, level });
+    await this.ensureMode();
+    const uri = await this.file(id, spot);
+    this.stop(key, 0.1);
+    const player = createAudioPlayer({ uri });
+    player.loop = true;
+    player.volume = 0;
+    const v: Voice = { player, level: LIBMAP[id].level, fade: null, gain: 0 };
+    this.voices.set(key, v);
+    // Start somewhere random in the loop so sounds never line up the same way.
+    try { await player.seekTo(Math.random() * 28); } catch { /* not loaded yet: start at 0 */ }
+    if (this.voices.get(key) !== v) { player.remove(); return; }
+    player.play();
+    this.rampTo(v, 1, fadeSec);
   }
 
-  /** Move a playing sound to a new spot, smoothly. */
-  move(key: string, spot: SpotId): void {
-    const v = this.voices.get(key);
-    if (!v || !this.ctx) return;
-    const sp = SPOTS[spot], now = this.ctx.currentTime;
-    v.pan.pan.linearRampToValueAtTime(sp.pan, now + 0.4);
-    v.lp.frequency.linearRampToValueAtTime(sp.far ? FAR_CUTOFF : NEAR_CUTOFF, now + 0.4);
-    v.gain.gain.linearRampToValueAtTime(v.level * (sp.far ? FAR_GAIN : 1), now + 0.4);
-    v.send.gain.linearRampToValueAtTime(sp.far ? 0.7 : 0.12, now + 0.4);
+  /** Move a playing sound: swap in the file for the new spot. */
+  async move(key: string, id: SoundId, spot: SpotId): Promise<void> {
+    if (!this.voices.has(key)) return;
+    await this.play(key, id, spot, 0.4);
   }
 
   stop(key: string, fadeSec = 1.5): void {
     const v = this.voices.get(key);
-    if (!v || !this.ctx) return;
+    if (!v) return;
     this.voices.delete(key);
-    const now = this.ctx.currentTime;
-    v.gain.gain.cancelScheduledValues(now);
-    v.gain.gain.setValueAtTime(v.gain.gain.value, now);
-    v.gain.gain.linearRampToValueAtTime(0.0001, now + fadeSec);
-    try { v.src.stop(now + fadeSec + 0.05); } catch { /* already stopped */ }
-    setTimeout(() => { try { v.pan.disconnect(); v.send.disconnect(); } catch { /* gone */ } }, fadeSec * 1000 + 300);
+    this.rampTo(v, 0, fadeSec, () => {
+      try { v.player.pause(); v.player.remove(); } catch { /* gone */ }
+    });
   }
 
   stopAll(fadeSec = 1.5, prefix = ''): void {
@@ -145,41 +137,30 @@ class Engine {
     return this.voices.has(key);
   }
 
-  setVolume(v: number): void {
-    this.volume = v;
-    this.applyMaster(0.2);
+  pauseAll(): void {
+    for (const v of this.voices.values()) { try { v.player.pause(); } catch { /* gone */ } }
   }
 
-  /** Lower the soundscape while the guide speaks. */
+  resumeAll(): void {
+    for (const v of this.voices.values()) { try { v.player.play(); } catch { /* gone */ } }
+  }
+
+  setVolume(vol: number): void {
+    this.volume = vol;
+    this.refresh();
+  }
+
+  /** Soften the soundscape while the guide speaks. */
   duck(on: boolean): void {
+    if (this.ducked === on) return;
     this.ducked = on;
-    this.applyMaster(0.25);
+    this.refresh();
   }
 
-  private applyMaster(ramp: number) {
-    if (!this.master || !this.ctx) return;
-    const now = this.ctx.currentTime;
-    const target = this.volume * (this.ducked ? 0.55 : 1);
-    this.master.gain.cancelScheduledValues(now);
-    this.master.gain.setValueAtTime(this.master.gain.value, now);
-    this.master.gain.linearRampToValueAtTime(target, now + ramp);
-  }
-
-  /** A soft two-note chime, used when no voice is available. */
-  chime(): void {
-    if (!this.ctx || !this.master) return;
-    const ctx = this.ctx, t = ctx.currentTime + 0.02;
-    for (const [f, at, peak] of [[880, 0, 0.15], [1318.5, 0.12, 0.1]]) {
-      const o = ctx.createOscillator();
-      o.frequency.value = f;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, t + at);
-      g.gain.exponentialRampToValueAtTime(peak, t + at + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.8);
-      o.connect(g);
-      g.connect(this.master);
-      o.start(t + at);
-      o.stop(t + at + 0.85);
+  private refresh() {
+    for (const v of this.voices.values()) {
+      if (v.fade) continue; // the running fade picks up the new level
+      try { v.player.volume = this.target(v); } catch { /* gone */ }
     }
   }
 }

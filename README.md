@@ -4,7 +4,7 @@ Guided attention training for iPhone. A spoken guide moves you around a generate
 
 ## Run it on your phone
 
-The audio engine is a native module, so Expo Go can't run this app. Use a development build:
+Use a development build (or TestFlight, see below):
 
 ```bash
 npm install

@@ -25,12 +25,24 @@ export function OnboardingScreen({ onDone }: { onDone: () => void }) {
             <Text style={s.mark}>attend<Text style={{ color: T.accent }}>.</Text></Text>
             <Heading size={34}>Practise where your attention goes.</Heading>
             <Body>
-              A calm voice guides you around a soundscape, near and far, left and right. Ten minutes or so, once a day, eyes closed.
+              A calm voice guides you around a few sounds, near and far, left and right. About twelve minutes, once a day, eyes closed.
             </Body>
             <View style={{ marginTop: 8 }}><SoundField items={sample} focus={['clock']} /></View>
           </FadeIn>
         )}
         {page === 1 && (
+          <FadeIn key="p-why" style={{ gap: 18 }}>
+            <Label>why it helps</Label>
+            <Heading size={30}>Worry pulls attention inward.</Heading>
+            <Body>
+              When you’re anxious or low, attention tends to get stuck on your own thoughts and feelings, and that keeps worry going.
+            </Body>
+            <Body>
+              This practice doesn’t ask you to stop any thought. It trains the steering: holding attention on one thing, moving it, widening it. Developed by psychologist Adrian Wells, it’s part of metacognitive therapy, and studies have found it helps with anxiety and low mood.
+            </Body>
+          </FadeIn>
+        )}
+        {page === 2 && (
           <FadeIn key="p1" style={{ gap: 18 }}>
             <Label>how a session works</Label>
             <Heading size={30}>Three parts, all guided by voice.</Heading>
@@ -46,7 +58,7 @@ export function OnboardingScreen({ onDone }: { onDone: () => void }) {
             <Body dim>You rate your attention before and after, and each session is kept in your log to share with your therapist.</Body>
           </FadeIn>
         )}
-        {page === 2 && (
+        {page === 3 && (
           <FadeIn key="p2" style={{ gap: 18 }}>
             <Label>before you begin</Label>
             <Heading size={30}>A few gentle notes.</Heading>
@@ -59,9 +71,9 @@ export function OnboardingScreen({ onDone }: { onDone: () => void }) {
       </ScrollView>
       <View style={s.footer}>
         <View style={s.dots}>
-          {[0, 1, 2].map(i => <View key={i} style={[s.dot, { backgroundColor: i === page ? T.accent : T.line }]} />)}
+          {[0, 1, 2, 3].map(i => <View key={i} style={[s.dot, { backgroundColor: i === page ? T.accent : T.line }]} />)}
         </View>
-        <Button label={page < 2 ? 'Continue' : 'Get started'} onPress={() => (page < 2 ? setPage(page + 1) : onDone())} />
+        <Button label={page < 3 ? 'Continue' : 'Get started'} onPress={() => (page < 3 ? setPage(page + 1) : onDone())} />
       </View>
     </View>
   );

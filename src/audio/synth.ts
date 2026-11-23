@@ -239,14 +239,3 @@ export function renderLoop(id: SoundId, seconds = LOOP_SECONDS, sr = SAMPLE_RATE
   for (let i = 0; i < n; i++) out[i] *= gain;
   return out;
 }
-
-/** A soft room reverb impulse, stereo. */
-export function renderImpulse(seconds = 2.8, sr = SAMPLE_RATE): [Float32Array<ArrayBuffer>, Float32Array<ArrayBuffer>] {
-  const n = Math.floor(seconds * sr);
-  const make = () => {
-    const d = new Float32Array(n);
-    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3.2);
-    return d;
-  };
-  return [make(), make()];
-}

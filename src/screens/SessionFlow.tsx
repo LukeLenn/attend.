@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
 import { useApp } from '../context';
+import { engine } from '../audio/engine';
 import { SessionRunner, planFrom } from '../session/runner';
 import { cueItems } from '../sounds';
 import { D, F, GUTTER, R } from '../tokens';
@@ -31,6 +32,8 @@ export function SessionFlow({ visible, onClose }: { visible: boolean; onClose: (
   const [paused, setPaused] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [result, setResult] = useState<{ completed: boolean; sec: number } | null>(null);
+  const [ready, setReady] = useState(0); // 0..1 sounds prepared
+  const [prepError, setPrepError] = useState(false);
   const runner = useRef<SessionRunner | null>(null);
   const items = useRef<CueItem[]>([]);
   const startedAt = useRef(new Date());
@@ -42,7 +45,15 @@ export function SessionFlow({ visible, onClose }: { visible: boolean; onClose: (
     if (!visible) return;
     setStep('before'); setBefore(null); setAfter(null); setNote(''); setCue(''); setFocus(null);
     setPaused(false); setConfirmEnd(false); setResult(null);
-  }, [visible]);
+    // Prepare the sounds while the person rates themselves.
+    const list = cueItems(settings).filter(i => i.kind === 'synth').map(i => ({ id: i.soundId!, spot: i.spot! }));
+    setReady(list.length === 0 ? 1 : 0);
+    setPrepError(false);
+    let live = true;
+    engine.prepare(list, (done, total) => { if (live) setReady(done / total); })
+      .catch(() => { if (live) setPrepError(true); });
+    return () => { live = false; };
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const wake = useCallback(() => {
     Animated.timing(dim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
@@ -132,12 +143,19 @@ export function SessionFlow({ visible, onClose }: { visible: boolean; onClose: (
             <Heading p={D} size={28} style={{ marginTop: 10 }}>Right now, is your attention more on yourself, or on the world around you?</Heading>
             <Body p={D} style={{ marginTop: 10 }}>“Yourself” means your thoughts, feelings and body. Go with your first answer.</Body>
             <View style={{ marginTop: 26 }}><RatingScale p={D} value={before} onChange={setBefore} /></View>
+            {prepError && <Text style={[s.tip, { color: D.danger, marginTop: 16 }]}>Couldn’t prepare the sounds. You can still begin with the voice alone.</Text>}
             <View style={s.tipBox}>
               <Text style={s.tip}>Close your eyes once the voice begins. The screen dims by itself, and you can tap it anytime.</Text>
             </View>
             <View style={s.btnRow}>
               <Button p={D} kind="quiet" label="Back" onPress={cancel} style={{ flex: 1 }} />
-              <Button p={D} label={before == null ? 'Skip and begin' : 'Begin'} onPress={begin} style={{ flex: 2 }} />
+              <Button
+                p={D}
+                label={ready < 1 && !prepError ? `Preparing sounds… ${Math.round(ready * 100)}%` : before == null ? 'Skip and begin' : 'Begin'}
+                onPress={begin}
+                disabled={ready < 1 && !prepError}
+                style={{ flex: 2 }}
+              />
             </View>
           </ScrollView>
         )}

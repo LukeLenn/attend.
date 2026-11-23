@@ -107,10 +107,15 @@ export class SessionRunner {
 
   async start(): Promise<void> {
     const synth = this.items.filter(i => i.kind === 'synth');
-    await engine.prepare(synth.map(i => i.soundId!));
-    for (const it of synth) {
-      if (this.stopped) break;
-      await engine.play('s:' + it.key, it.soundId!, it.spot!, 4);
+    try {
+      await engine.prepare(synth.map(i => ({ id: i.soundId!, spot: i.spot! })));
+      for (const it of synth) {
+        if (this.stopped) break;
+        await engine.play('s:' + it.key, it.soundId!, it.spot!, 4);
+      }
+    } catch (e) {
+      // Sounds failed: carry on with the voice alone rather than stalling.
+      console.warn('Soundscape unavailable', e);
     }
     if (this.stopped) { engine.stopAll(0.5, 's:'); return; }
     this.ev.onFocus(null);
@@ -214,14 +219,14 @@ export class SessionRunner {
     this.paused = true;
     this.pauseAt = Date.now();
     hush();
-    void engine.suspend();
+    engine.pauseAll();
   }
 
   resume(): void {
     if (!this.paused || this.stopped) return;
     if (!this.intro) this.pausedTotal += Date.now() - this.pauseAt;
     this.paused = false;
-    void engine.resume();
+    engine.resumeAll();
   }
 
   /** End early (or after the closing words). */

@@ -33,12 +33,11 @@
     },
     "plugins": [
       [
-        "react-native-audio-api",
+        "expo-audio",
         {
-          "iosBackgroundMode": true,
-          "androidForegroundService": true,
-          "androidFSTypes": ["mediaPlayback"],
-          "androidPermissions": ["android.permission.FOREGROUND_SERVICE", "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"]
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": true
         }
       ],
       "expo-font",

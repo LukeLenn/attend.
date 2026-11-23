@@ -5,17 +5,20 @@ Guided attention training (ATT) app. Expo + React Native + TypeScript. Sibling t
 ## Stack
 
 - **Framework**: Expo SDK 58 (managed workflow, Continuous Native Generation — never edit `ios/` or `android/`)
-- **Audio**: `react-native-audio-api` (Web Audio API on device). Needs a development build; Expo Go won't work.
+- **Audio**: `expo-audio` looping players over WAV files the app renders itself (see below)
 - **Speech**: `expo-speech` (on-device iOS voices)
 - **Storage**: AsyncStorage, all data on-device, nothing leaves the phone
 - **Fonts**: Newsreader (headings), DM Sans (body), IBM Plex Mono (labels, numbers)
 
 ## How the sound works
 
-- `src/audio/synth.ts` renders each of the 12 sounds into a seamless 32 s mono loop in plain TypeScript (no native calls). It's deterministic enough to test in Node: `node --experimental-transform-types` on a script that imports it.
-- `src/audio/engine.ts` plays loops through: buffer → lowpass (distance) → gain → stereo pan → master, plus a reverb send. Far = quieter, darker, more reverb.
-- Rendering ahead (rather than scheduling events from JS) keeps the soundscape steady when JS is busy or the screen locks. iOS background audio is enabled via the audio-api config plugin.
-- Preview voices use key prefix `p:`, session voices `s:`.
+- `src/audio/synth.ts` renders each of the 12 sounds into a seamless 32 s mono loop in plain TypeScript.
+- `src/audio/place.ts` places it: constant-power pan, darker and quieter for far, a small Freeverb-style room, then encodes a stereo 16-bit WAV. Reverb and filters run over the loop twice so the loop point stays seamless.
+- `src/audio/engine.ts` caches each sound+spot WAV in `Paths.cache/attend-sounds/` (name includes a version, bump it in `fileName()` when the synthesis changes) and plays it with a looping expo-audio player. During a session the only thing that changes is player volume (fades, ducking under the voice).
+- v1 used `react-native-audio-api` with a live native graph and froze about a minute into a session on device. Don't go back to driving a live graph from JS.
+- Both synth and place run in Node: bundle a test script with esbuild and run it.
+- Preview players use key prefix `p:`, session players `s:`.
+- The exercise uses 3 sounds by default and at most 5 (`MAX_SOUNDS`), plus up to 3 named real sounds.
 
 ## How a session works
 

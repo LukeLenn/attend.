@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useApp } from '../context';
 import { PHASES, PLAN_PRESETS, cueItems, planMinutes, presetMatch, PRESETS } from '../sounds';
@@ -7,6 +7,7 @@ import { dateKey, greeting, streak } from '../utils';
 import { Body, Button, Card, Chip, FadeIn, Heading, Label, Rule, Stepper, Toggle, tap } from '../components/ui';
 import { SoundField } from '../components/SoundField';
 import { WeekStrip } from '../components/LogCharts';
+import { WHY_LINES, WhySheet } from './WhySheet';
 
 export function PracticeScreen() {
   const { settings, sessions, updateSettings, startSession, goTo } = useApp();
@@ -23,6 +24,8 @@ export function PracticeScreen() {
   };
 
   const canStart = items.length > 0 && total > 0;
+  const [whyOpen, setWhyOpen] = useState(false);
+  const whyLine = WHY_LINES[new Date().getDate() % WHY_LINES.length];
 
   return (
     <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
@@ -33,6 +36,13 @@ export function PracticeScreen() {
             ? 'You’ve practised today. Another round is fine if you’d like one.'
             : 'A few minutes with your eyes closed, moving your attention where the voice asks.'}
         </Body>
+      </FadeIn>
+
+      <FadeIn delay={30}>
+        <Pressable onPress={() => { tap(); setWhyOpen(true); }} accessibilityRole="button" accessibilityLabel="Why this helps" style={s.why}>
+          <Text style={s.whyLine}>{whyLine}</Text>
+          <Text style={s.link}>why this helps</Text>
+        </Pressable>
       </FadeIn>
 
       <FadeIn delay={60}>
@@ -100,7 +110,7 @@ export function PracticeScreen() {
               <Text style={s.link}>edit</Text>
             </View>
             <SoundField items={items} focus={null} />
-            <Text style={s.meta}>{items.length} sounds · {presetLabel}</Text>
+            <Text style={s.meta}>{items.length} sounds · {presetLabel}{items.length < 3 ? ' · three or more works best' : ''}</Text>
           </Card>
         </Pressable>
       </FadeIn>
@@ -109,6 +119,7 @@ export function PracticeScreen() {
         <Button label={canStart ? `Begin · ${total} min` : items.length ? 'Turn on at least one part' : 'Choose at least one sound'} onPress={startSession} disabled={!canStart} />
         <Body dim style={s.note}>Best with headphones, once a day, at a time you feel fairly settled.</Body>
       </FadeIn>
+      <WhySheet visible={whyOpen} onClose={() => setWhyOpen(false)} />
     </ScrollView>
   );
 }
@@ -125,4 +136,6 @@ const s = StyleSheet.create({
   phaseTitle: { fontFamily: F.sansMedium, fontSize: 15, color: T.text },
   phaseDesc: { fontFamily: F.sans, fontSize: 12.5, lineHeight: 17, color: T.textDim, marginTop: 2 },
   note: { textAlign: 'center', fontSize: 13 },
+  why: { borderLeftWidth: 2, borderLeftColor: T.accent, paddingLeft: 14, paddingVertical: 2, gap: 4 },
+  whyLine: { fontFamily: F.serifItalic, fontSize: 17, lineHeight: 23, color: T.textSoft },
 });

@@ -7,6 +7,7 @@ import { listVoices, say, VoiceOption, configureSpeech } from '../speech';
 import { engine } from '../audio/engine';
 import { F, GUTTER, T } from '../tokens';
 import { Body, Button, Card, Heading, Label, Rule, Stepper, Toggle, tap } from '../components/ui';
+import { WhySheet } from './WhySheet';
 
 const PRIVACY_URL = 'https://example.com/attend/privacy'; // TODO: replace before submitting
 
@@ -14,6 +15,7 @@ export function SettingsSheet({ visible, onClose }: { visible: boolean; onClose:
   const { settings, updateSettings, resetAll } = useApp();
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [showAllVoices, setShowAllVoices] = useState(false);
+  const [whyOpen, setWhyOpen] = useState(false);
 
   useEffect(() => {
     if (visible) void listVoices().then(setVoices);
@@ -109,12 +111,14 @@ export function SettingsSheet({ visible, onClose }: { visible: boolean; onClose:
             <Body>
               It’s a practice aid for homework set with a therapist. It isn’t medical advice or a treatment, and it isn’t meant as a way to cope with worry in the moment. If you’re struggling, please contact your therapist, doctor or local emergency services.
             </Body>
+            <Pressable onPress={() => setWhyOpen(true)}><Text style={s.link}>why this helps, and the research</Text></Pressable>
             <Body dim>Everything you record stays on this phone. Nothing is sent anywhere.</Body>
             <Text style={s.small}>Privacy policy: {PRIVACY_URL}</Text>
           </Card>
 
           <Button kind="danger" label="Delete all data" onPress={confirmReset} />
         </ScrollView>
+        <WhySheet visible={whyOpen} onClose={() => setWhyOpen(false)} />
       </View>
     </Modal>
   );
