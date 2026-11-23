@@ -33,12 +33,15 @@ export function OnboardingScreen({ onDone }: { onDone: () => void }) {
         {page === 1 && (
           <FadeIn key="p-why" style={{ gap: 18 }}>
             <Label>why it helps</Label>
-            <Heading size={30}>Worry pulls attention inward.</Heading>
+            <Heading size={30}>Worry feeds on attention.</Heading>
             <Body>
-              When you’re anxious or low, attention tends to get stuck on your own thoughts and feelings, and that keeps worry going.
+              When you’re anxious or low, attention gets pulled onto your own thoughts and feelings, and it can feel stuck there. That’s what keeps worry going.
             </Body>
             <Body>
-              This practice doesn’t ask you to stop any thought. It trains the steering: holding attention on one thing, moving it, widening it. Developed by psychologist Adrian Wells, it’s part of metacognitive therapy, and studies have found it helps with anxiety and low mood.
+              This practice teaches you that your attention is under your control. You don’t fight any thought. You just move your attention where the voice asks, again and again.
+            </Body>
+            <Body dim>
+              Developed by psychologist Adrian Wells as part of metacognitive therapy. Studies have found it helps with anxiety and low mood.
             </Body>
           </FadeIn>
         )}

@@ -5,12 +5,12 @@ import { Body, Heading, Label, Rule } from '../components/ui';
 
 export const WHY = [
   {
-    title: 'Worry pulls attention inward',
-    body: 'When we’re anxious or low, attention tends to lock onto our own thoughts, feelings and body, and onto what might go wrong. The longer it stays there, the more worry and rumination keep themselves going.',
+    title: 'Worry feeds on attention',
+    body: 'Worry and rumination only keep going while attention stays on them. When we’re anxious or low, attention tends to lock onto our own thoughts, feelings and body, and onto what might go wrong, and it can start to feel as if it’s stuck there.',
   },
   {
-    title: 'This trains the steering, not the thoughts',
-    body: 'You don’t try to stop or change any thought. You practise choosing where your attention goes: holding it on one thing, moving it quickly, then widening it. As that control gets more flexible, it becomes easier to step out of a worry loop when you notice you’re in one.',
+    title: 'Your attention is under your control',
+    body: 'This practice shows you that it isn’t stuck. You don’t try to stop or change any thought. You just choose where attention goes: holding it on one sound, moving it quickly, then widening it. Each time you do, you see that you can steer it, which makes it easier to stop feeding a worry when you notice one starting.',
   },
   {
     title: 'Why sounds',
@@ -32,9 +32,9 @@ export const WHY = [
 
 /** One line for the practice screen; rotates by day. */
 export const WHY_LINES = [
-  'Worry pulls attention inward. This practice trains you to steer it.',
+  'Worry feeds on attention. This practice shows you it’s yours to steer.',
   'You’re not trying to stop thoughts. Just practising where attention goes.',
-  'Flexible attention makes it easier to step out of a worry loop.',
+  'Attention can feel stuck on worry. It isn’t. You can move it.',
   'Thoughts can come along. The skill is following the voice anyway.',
 ];
 
@@ -58,7 +58,7 @@ export function WhySheet({ visible, onClose }: { visible: boolean; onClose: () =
           <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button"><Text style={s.done}>done</Text></Pressable>
         </View>
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-          <Heading size={30}>A few minutes of steering your attention.</Heading>
+          <Heading size={30}>Worry feeds on attention. You can steer it.</Heading>
           {WHY.map((w, i) => (
             <View key={w.title} style={{ gap: 6 }}>
               {i > 0 && <Rule style={{ marginBottom: 14 }} />}
